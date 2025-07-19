@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Reflejo de Letras</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    canvas {
+      display: none;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-6">
+  <div class="bg-white shadow-xl rounded-xl p-8 max-w-3xl w-full space-y-6">
+    <h1 class="text-3xl font-bold text-center text-blue-700">Efecto Espejo en Letras</h1>
+
+    <input type="file" id="imageInput" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200"/>
+
+    <div id="preview" class="text-center">
+      <img id="uploadedImage" class="mx-auto max-w-full max-h-64 mt-4 rounded-md shadow-md" />
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="block font-semibold mb-1">Color del texto:</label>
+        <input type="color" id="colorPicker" class="w-full">
+      </div>
+      <div>
+        <label class="block font-semibold mb-1">Fuente:</label>
+        <select id="fontSelect" class="w-full border rounded px-2 py-1">
+          <option value="monospace">Monospace</option>
+          <option value="Arial">Arial</option>
+          <option value="Times New Roman">Times New Roman</option>
+          <option value="Courier New">Courier New</option>
+          <option value="Georgia">Georgia</option>
+        </select>
+      </div>
+      <div>
+        <label class="block font-semibold mb-1">Tamaño del texto:</label>
+        <input type="number" id="fontSize" min="10" max="100" value="24" class="w-full border rounded px-2 py-1">
+      </div>
+    </div>
+
+    <div id="textOutput" class="text-center mt-4 space-y-2">
+      <h2 class="text-xl font-semibold text-gray-700">Texto Detectado (Reflejado)</h2>
+      <p id="mirroredText" class="text-lg text-purple-600 font-mono break-words whitespace-pre-wrap" style="transform: scaleX(-1); display: inline-block;"></p>
+    </div>
+
+    <div class="text-center flex flex-wrap justify-center gap-4">
+      <button onclick="downloadImage('png')" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded">Descargar PNG</button>
+      <button onclick="downloadImage('jpg')" class="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded">Descargar JPG</button>
+      <button onclick="downloadPDF()" class="bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded">Descargar PDF</button>
+      <button onclick="resetAll()" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded">Limpiar</button>
+    </div>
+
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <script>
+    const imageInput = document.getElementById('imageInput');
+    const uploadedImage = document.getElementById('uploadedImage');
+    const mirroredText = document.getElementById('mirroredText');
+    const canvas = document.getElementById('canvas');
+
+    const colorPicker = document.getElementById('colorPicker');
+    const fontSelect = document.getElementById('fontSelect');
+    const fontSizeInput = document.getElementById('fontSize');
+
+    let currentText = "";
+
+    imageInput.addEventListener('change', () => {
+      const file = imageInput.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        uploadedImage.onload = () => {
+          runOCR(reader.result);
+        };
+        uploadedImage.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function runOCR(imageSrc) {
+      mirroredText.textContent = "Procesando...";
+      Tesseract.recognize(imageSrc, 'eng', {
+        logger: m => console.log(m)
+      }).then(({ data: { text } }) => {
+        const cleaned = text.trim();
+        currentText = cleaned;
+        mirroredText.textContent = cleaned;
+        mirroredText.style.color = colorPicker.value;
+        mirroredText.style.fontFamily = fontSelect.value;
+        mirroredText.style.fontSize = fontSizeInput.value + "px";
+      }).catch(err => {
+        mirroredText.textContent = "Error al procesar la imagen.";
+        console.error(err);
+      });
+    }
+
+    function downloadImage(format) {
+      const text = currentText;
+      const image = uploadedImage;
+
+      const width = image.naturalWidth;
+      const height = image.naturalHeight;
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+
+      ctx.clearRect(0, 0, width, height);
+
+      // Imagen original
+      ctx.drawImage(image, 0, 0, width, height);
+
+      // Texto reflejado
+      ctx.save();
+      ctx.translate(width, 0);
+      ctx.scale(-1, 1);
+      ctx.font = `${(width / 800) * parseInt(fontSizeInput.value)}px ${fontSelect.value}`;
+      ctx.fillStyle = colorPicker.value;
+      ctx.textAlign = "center";
+      ctx.fillText(text, width / 2, height - 50);
+      ctx.restore();
+
+      const dataURL = canvas.toDataURL(`image/${format === 'jpg' ? 'jpeg' : 'png'}`);
+      const link = document.createElement('a');
+      link.download = `imagen_reflejada.${format}`;
+      link.href = dataURL;
+      link.click();
+    }
+
+    async function downloadPDF() {
+      const text = currentText;
+      const image = uploadedImage;
+
+      const width = image.naturalWidth;
+      const height = image.naturalHeight;
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(image, 0, 0, width, height);
+
+      ctx.save();
+      ctx.translate(width, 0);
+      ctx.scale(-1, 1);
+      ctx.font = `${(width / 800) * parseInt(fontSizeInput.value)}px ${fontSelect.value}`;
+      ctx.fillStyle = colorPicker.value;
+      ctx.textAlign = "center";
+      ctx.fillText(text, width / 2, height - 50);
+      ctx.restore();
+
+      const imgData = canvas.toDataURL("image/jpeg", 1.0);
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({
+        orientation: width > height ? 'landscape' : 'portrait',
+        unit: 'pt',
+        format: [width, height]
+      });
+      pdf.addImage(imgData, 'JPEG', 0, 0, width, height);
+      pdf.save("imagen_reflejada.pdf");
+    }
+
+    function resetAll() {
+      uploadedImage.src = "";
+      mirroredText.textContent = "";
+      imageInput.value = null;
+      currentText = "";
+    }
+  </script>
+</body>
+</html>
